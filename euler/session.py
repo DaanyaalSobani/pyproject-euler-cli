@@ -26,7 +26,7 @@ def save_session(s: requests.Session) -> None:
         {"name": c.name, "value": c.value, "domain": c.domain, "path": c.path}
         for c in s.cookies
     ]
-    config.SESSION_FILE.write_text(json.dumps(cookies))
+    config.SESSION_FILE.write_text(json.dumps(cookies, indent=2))
 
 
 def clear_session() -> None:
