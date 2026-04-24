@@ -4,31 +4,6 @@ from unittest.mock import MagicMock, patch
 import euler.config as config
 import euler.submit as submit_mod
 
-_UNSOLVED_PROBLEM_HTML = """
-<html><body>
-<form name="form" method="post" action="problem=42">
-  <div class="data_entry">
-    <div class="row">
-      <div class="cell right w200">Answer:&nbsp;&nbsp;</div>
-      <div class="cell"><input size="20" type="text" name="guess_42" id="guess" maxlength="30"></div>
-      <input type="hidden" name="csrf_token" value="tok789">
-    </div>
-  </div>
-</form>
-</body></html>
-"""
-
-_SOLVED_PROBLEM_HTML = """
-<html><body>
-<form name="form" method="post" action="problem=1">
-  <div class="data_entry">
-    <div>Answer:&nbsp;&nbsp;<span class="strong">233168</span></div>
-    <div class="small_notice">Completed on Thu, 23 Apr 2026, 16:31</div>
-  </div>
-</form>
-</body></html>
-"""
-
 _CORRECT_RESPONSE_HTML = """
 <html><body>
 <div id="content">
@@ -47,50 +22,124 @@ _INCORRECT_RESPONSE_HTML = """
 </body></html>
 """
 
+_UNKNOWN_RESPONSE_HTML = """
+<html><body>
+<div id="content">
+  <p>You are submitting too quickly. Please wait and try again.</p>
+</div>
+</body></html>
+"""
 
-def _make_session(get_html: str, post_html: str, get_url: str = "https://projecteuler.net/problem=42") -> MagicMock:
-    get_resp = MagicMock()
-    get_resp.text = get_html
-    get_resp.url = get_url
-    get_resp.raise_for_status = MagicMock()
 
-    post_resp = MagicMock()
-    post_resp.text = post_html
-    post_resp.url = get_url
-    post_resp.raise_for_status = MagicMock()
+def _loaded_session_mock():
+    """Mock for session.load_session() — submit reads .cookies off it."""
+    m = MagicMock()
+    cookie = MagicMock()
+    cookie.name = "__Host-PHPSESSID"
+    cookie.value = "abc123"
+    cookie.domain = "projecteuler.net"
+    cookie.path = "/"
+    m.cookies = [cookie]
+    return m
 
-    s = MagicMock()
-    s.get.return_value = get_resp
-    s.post.return_value = post_resp
-    return s
+
+def _mock_playwright(*, guess_input_present: bool, page_url_before_fill: str, result_html: str, result_url: str):
+    """Build a fake sync_playwright() context manager whose .chromium.launch()
+    context manager yields a Browser whose context/page simulate PE's responses."""
+    guess_input = MagicMock() if guess_input_present else None
+
+    def query_selector(sel):
+        if "guess_" in sel:
+            return guess_input
+        return MagicMock()  # submit button
+
+    page = MagicMock()
+    page.url = page_url_before_fill
+    page.query_selector.side_effect = query_selector
+    page.goto = MagicMock()
+    page.click = MagicMock()
+    page.content.return_value = result_html
+
+    # After form submit the page URL becomes result_url
+    def after_click(*a, **kw):
+        page.url = result_url
+    page.click.side_effect = after_click
+
+    # page.expect_navigation(...) is a context manager; make it a no-op
+    nav_cm = MagicMock()
+    nav_cm.__enter__ = MagicMock(return_value=None)
+    nav_cm.__exit__ = MagicMock(return_value=False)
+    page.expect_navigation.return_value = nav_cm
+
+    context = MagicMock()
+    context.new_page.return_value = page
+    context.add_cookies = MagicMock()
+
+    browser = MagicMock()
+    browser.new_context.return_value = context
+    browser.__enter__ = MagicMock(return_value=browser)
+    browser.__exit__ = MagicMock(return_value=False)
+
+    pw = MagicMock()
+    pw.chromium.launch.return_value = browser
+
+    pw_cm = MagicMock()
+    pw_cm.__enter__ = MagicMock(return_value=pw)
+    pw_cm.__exit__ = MagicMock(return_value=False)
+    return pw_cm
 
 
 def test_submit_correct_returns_correct(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "SESSION_FILE", tmp_path / "session.json")
-    with patch("euler.session.load_session", return_value=_make_session(_UNSOLVED_PROBLEM_HTML, _CORRECT_RESPONSE_HTML)):
+    pw = _mock_playwright(
+        guess_input_present=True,
+        page_url_before_fill="https://projecteuler.net/problem=42",
+        result_html=_CORRECT_RESPONSE_HTML,
+        result_url="https://projecteuler.net/problem=42",
+    )
+    with patch("euler.session.load_session", return_value=_loaded_session_mock()), \
+         patch("euler.submit.sync_playwright", return_value=pw):
         assert submit_mod.submit_answer(42, "162") == "correct"
 
 
 def test_submit_incorrect_returns_incorrect(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "SESSION_FILE", tmp_path / "session.json")
-    with patch("euler.session.load_session", return_value=_make_session(_UNSOLVED_PROBLEM_HTML, _INCORRECT_RESPONSE_HTML)):
+    pw = _mock_playwright(
+        guess_input_present=True,
+        page_url_before_fill="https://projecteuler.net/problem=42",
+        result_html=_INCORRECT_RESPONSE_HTML,
+        result_url="https://projecteuler.net/problem=42",
+    )
+    with patch("euler.session.load_session", return_value=_loaded_session_mock()), \
+         patch("euler.submit.sync_playwright", return_value=pw):
         assert submit_mod.submit_answer(42, "0") == "incorrect"
 
 
-def test_submit_posts_correct_dynamic_field_name(tmp_path, monkeypatch):
+def test_submit_returns_blocked_on_unknown_response(tmp_path, monkeypatch):
+    """A response missing both markers (bot deflection, rate limit, etc.) must
+    surface as "blocked", not silently reported as correct or incorrect."""
     monkeypatch.setattr(config, "SESSION_FILE", tmp_path / "session.json")
-    mock_sess = _make_session(_UNSOLVED_PROBLEM_HTML, _CORRECT_RESPONSE_HTML)
-    with patch("euler.session.load_session", return_value=mock_sess):
-        submit_mod.submit_answer(42, "162")
-    data = mock_sess.post.call_args[1]["data"]
-    assert data["guess_42"] == "162"
-    assert data["csrf_token"] == "tok789"
+    pw = _mock_playwright(
+        guess_input_present=True,
+        page_url_before_fill="https://projecteuler.net/problem=42",
+        result_html=_UNKNOWN_RESPONSE_HTML,
+        result_url="https://projecteuler.net/about",
+    )
+    with patch("euler.session.load_session", return_value=_loaded_session_mock()), \
+         patch("euler.submit.sync_playwright", return_value=pw):
+        assert submit_mod.submit_answer(42, "162") == "blocked"
 
 
 def test_submit_already_solved_raises(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "SESSION_FILE", tmp_path / "session.json")
-    mock_sess = _make_session(_SOLVED_PROBLEM_HTML, "")
-    with patch("euler.session.load_session", return_value=mock_sess):
+    pw = _mock_playwright(
+        guess_input_present=False,  # no guess input = already solved
+        page_url_before_fill="https://projecteuler.net/problem=1",
+        result_html="",
+        result_url="https://projecteuler.net/problem=1",
+    )
+    with patch("euler.session.load_session", return_value=_loaded_session_mock()), \
+         patch("euler.submit.sync_playwright", return_value=pw):
         with pytest.raises(ValueError, match="already solved"):
             submit_mod.submit_answer(1, "233168")
 
@@ -104,25 +153,13 @@ def test_submit_raises_if_not_logged_in(tmp_path, monkeypatch):
 
 def test_submit_raises_if_session_expired(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "SESSION_FILE", tmp_path / "session.json")
-    mock_sess = _make_session(_UNSOLVED_PROBLEM_HTML, _CORRECT_RESPONSE_HTML, get_url="https://projecteuler.net/sign_in")
-    with patch("euler.session.load_session", return_value=mock_sess):
+    pw = _mock_playwright(
+        guess_input_present=True,
+        page_url_before_fill="https://projecteuler.net/sign_in",  # redirected
+        result_html="",
+        result_url="https://projecteuler.net/sign_in",
+    )
+    with patch("euler.session.load_session", return_value=_loaded_session_mock()), \
+         patch("euler.submit.sync_playwright", return_value=pw):
         with pytest.raises(PermissionError):
             submit_mod.submit_answer(42, "162")
-
-
-_UNKNOWN_RESPONSE_HTML = """
-<html><body>
-<div id="content">
-  <p>You are submitting too quickly. Please wait and try again.</p>
-</div>
-</body></html>
-"""
-
-
-def test_submit_returns_blocked_on_unknown_response(tmp_path, monkeypatch):
-    """A response missing both correct and wrong markers (e.g., bot-deflection
-    redirect to /about, rate-limit page) must surface as "blocked", not silently
-    reported as correct or incorrect."""
-    monkeypatch.setattr(config, "SESSION_FILE", tmp_path / "session.json")
-    with patch("euler.session.load_session", return_value=_make_session(_UNSOLVED_PROBLEM_HTML, _UNKNOWN_RESPONSE_HTML)):
-        assert submit_mod.submit_answer(42, "162") == "blocked"

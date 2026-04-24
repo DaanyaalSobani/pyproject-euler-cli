@@ -1,5 +1,6 @@
 import json
 from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 from . import config, session
 
 _CSRF_FIELD = "csrf_token"
@@ -7,58 +8,41 @@ _WRONG_IMAGE = "answer_wrong.png"
 _CORRECT_IMAGE = "answer_correct.png"
 
 
-def _save_debug_dump(post_resp) -> None:
-    """Write POST request+response details to ~/.euler/last_submit_debug.json.
+def _save_debug_dump(final_url: str, html: str) -> None:
+    """Write submit outcome details to ~/.euler/last_submit_debug.json.
     Best-effort: swallows all errors so this never breaks a submission."""
     try:
         debug_file = config.SESSION_FILE.parent / "last_submit_debug.json"
         debug_file.parent.mkdir(parents=True, exist_ok=True)
-        history = [
-            {
-                "url": h.url,
-                "status": h.status_code,
-                "method": h.request.method,
-                "location_header": h.headers.get("Location"),
-                "set_cookie": h.headers.get("Set-Cookie"),
-            }
-            for h in post_resp.history
-        ]
-        # The *original* POST request (before any redirects)
-        original_req = post_resp.history[0].request if post_resp.history else post_resp.request
         debug_file.write_text(json.dumps({
-            "original_request_method": original_req.method,
-            "original_request_url": original_req.url,
-            "original_request_headers": dict(original_req.headers),
-            "original_request_body": original_req.body,
-            "redirect_chain": history,
-            "final_response_status": post_resp.status_code,
-            "final_response_url": post_resp.url,
-            "final_response_text_head": post_resp.text[:2000],
-            "has_wrong_marker": _WRONG_IMAGE in post_resp.text,
-            "has_correct_marker": _CORRECT_IMAGE in post_resp.text,
+            "final_url": final_url,
+            "has_wrong_marker": _WRONG_IMAGE in html,
+            "has_correct_marker": _CORRECT_IMAGE in html,
+            "final_response_text_head": html[:2000],
         }, indent=2))
     except Exception:
         pass
 
 
-def _find_answer_input(html: str, problem: int) -> tuple[str, str] | None:
-    """Returns (answer_field_name, csrf_token) if the problem is unsolved, else None."""
-    soup = BeautifulSoup(html, "html.parser")
-    answer_input = soup.find("input", {"name": f"guess_{problem}"})
-    if answer_input is None:
-        return None
-    csrf = soup.find("input", {"name": _CSRF_FIELD})
-    token = csrf["value"] if csrf else ""
-    return answer_input["name"], token
+def _cookies_for_playwright(requests_cookiejar) -> list[dict]:
+    """Convert a requests.Session cookie jar into Playwright's add_cookies format."""
+    out = []
+    for c in requests_cookiejar:
+        cookie = {
+            "name": c.name,
+            "value": c.value,
+            "domain": (c.domain or "projecteuler.net").lstrip("."),
+            "path": c.path or "/",
+        }
+        # __Host- and __Secure- prefixes require Secure attribute
+        if c.name.startswith("__Host-") or c.name.startswith("__Secure-"):
+            cookie["secure"] = True
+        out.append(cookie)
+    return out
 
 
 def _classify_response(html: str) -> str:
-    """Returns "correct", "incorrect", or "blocked".
-
-    "blocked" means PE returned a response with neither marker — typically the
-    /about page it 302-redirects to when bot-deflection kicks in. The answer
-    was not actually processed; treat this as a submission failure rather than
-    silently reporting "incorrect"."""
+    """Returns "correct", "incorrect", or "blocked"."""
     if _CORRECT_IMAGE in html:
         return "correct"
     if _WRONG_IMAGE in html:
@@ -70,34 +54,41 @@ def submit_answer(problem: int, answer: str) -> str:
     """Submit answer to problem N. Returns "correct", "incorrect", or "blocked".
     Raises PermissionError if not logged in.
     Raises ValueError if the problem is already solved.
+
+    Uses a headless Playwright browser for the submission itself — PE's
+    bot deflection 302-redirects any `requests`/`curl_cffi` POST to /about,
+    even with matching TLS fingerprint and all browser headers. Reusing the
+    same client stack that logged in is the only thing that works.
     """
-    s = session.load_session()
-    if s is None:
+    loaded = session.load_session()
+    if loaded is None:
         raise PermissionError("Not logged in")
 
+    cookies = _cookies_for_playwright(loaded.cookies)
     problem_url = f"{config.BASE_URL}/problem={problem}"
-    resp = s.get(problem_url)
-    resp.raise_for_status()
 
-    if "sign_in" in resp.url:
-        raise PermissionError("Session expired")
+    with sync_playwright() as pw:
+        with pw.chromium.launch(headless=True) as browser:
+            context = browser.new_context()
+            context.add_cookies(cookies)
+            page = context.new_page()
+            page.goto(problem_url)
 
-    form = _find_answer_input(resp.text, problem)
-    if form is None:
-        raise ValueError(f"Problem {problem} is already solved (no answer form on page).")
+            if "sign_in" in page.url:
+                raise PermissionError("Session expired")
 
-    field_name, token = form
-    # Referer and Origin are required by PE's bot deflection; without them the
-    # server 302-redirects the POST to /about and the answer is never processed.
-    post_headers = {
-        "Referer": problem_url,
-        "Origin": config.BASE_URL,
-    }
-    post_resp = s.post(
-        problem_url,
-        data={field_name: answer, _CSRF_FIELD: token},
-        headers=post_headers,
-    )
-    _save_debug_dump(post_resp)
-    post_resp.raise_for_status()
-    return _classify_response(post_resp.text)
+            guess_input = page.query_selector(f"input[name='guess_{problem}']")
+            if guess_input is None:
+                raise ValueError(
+                    f"Problem {problem} is already solved (no answer form on page)."
+                )
+
+            guess_input.fill(answer)
+            with page.expect_navigation(wait_until="domcontentloaded"):
+                page.click("input[type='submit']")
+
+            final_url = page.url
+            result_html = page.content()
+
+    _save_debug_dump(final_url, result_html)
+    return _classify_response(result_html)
