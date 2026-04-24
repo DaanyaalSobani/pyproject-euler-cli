@@ -17,18 +17,19 @@ def login():
     if creds is None:
         username = click.prompt("Username")
         password = click.prompt("Password", hide_input=True)
-        config.save_credentials(username, password)
     else:
         username, password = creds
     try:
         display_name = auth.login(username, password)
-        console.print(f"[green]✓[/green] Logged in as {display_name}")
     except ValueError as e:
         console.print(f"[red]✗[/red] {e}")
         raise SystemExit(1)
     except Exception as e:
         console.print(f"[red]✗[/red] Unexpected error: {e}")
         raise SystemExit(1)
+    if creds is None:
+        config.save_credentials(username, password)
+    console.print(f"[green]✓[/green] Logged in as {display_name}")
 
 
 @main.command()

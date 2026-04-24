@@ -24,6 +24,16 @@ def test_login_prompts_when_no_creds_stored():
     mock_save.assert_called_once_with("u@e.com", "pass")
 
 
+def test_login_does_not_save_creds_when_login_fails():
+    runner = CliRunner()
+    with patch("euler.config.get_credentials", return_value=None), \
+         patch("euler.config.save_credentials") as mock_save, \
+         patch("euler.auth.login", side_effect=ValueError("Login timed out")):
+        result = runner.invoke(main, ["login"], input="u@e.com\nbadpass\n")
+    assert result.exit_code == 1
+    mock_save.assert_not_called()
+
+
 def test_login_exits_1_on_login_failure():
     runner = CliRunner()
     with patch("euler.config.get_credentials", return_value=("u@e.com", "bad")), \
@@ -48,3 +58,4 @@ def test_logout_removes_keyring_when_confirmed():
         result = runner.invoke(main, ["logout"], input="y\n")
     assert result.exit_code == 0
     mock_logout.assert_called_once_with(remove_keyring=True)
+    assert "Logged out" in result.output
