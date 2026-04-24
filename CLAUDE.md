@@ -52,7 +52,9 @@ euler logout
 
 ## Browser Testing
 
-The Playwright MCP gives Claude Code browser control during development. It is used to inspect projecteuler.net HTML structure and verify that submissions go through. The CLI itself uses requests only — the browser is a dev-time tool.
+The Playwright MCP gives Claude Code browser control during development. It is used to inspect projecteuler.net HTML structure and verify that submissions go through.
+
+`euler login` and `euler submit` both use Playwright at runtime — login needs a real browser for the CAPTCHA, and submit needs it because PE's bot deflection 302-redirects any non-Chromium POST to `/about` regardless of TLS fingerprint or headers. See `docs/playwright-submit-decision.md` for the full investigation. `euler status` and `euler get-problem` use plain `requests` — GETs are not blocked.
 
 ## HTML Field Names
 
