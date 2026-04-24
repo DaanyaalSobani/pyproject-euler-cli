@@ -118,3 +118,12 @@ def test_status_not_logged_in_exits_1():
         result = runner.invoke(main, ["status"])
     assert result.exit_code == 1
     assert "euler login" in result.output
+
+
+def test_status_network_error_exits_1():
+    import requests
+    runner = CliRunner()
+    with patch("euler.status.get_status", side_effect=requests.exceptions.ConnectionError("network unreachable")):
+        result = runner.invoke(main, ["status"])
+    assert result.exit_code == 1
+    assert "Network error" in result.output
