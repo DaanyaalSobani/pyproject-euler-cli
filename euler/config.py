@@ -16,13 +16,16 @@ def load_dev_env() -> dict[str, str]:
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
             key, _, value = line.partition("=")
-            result[key.strip()] = value.strip()
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                value = value[1:-1]
+            result[key.strip()] = value
     return result
 
 
 def get_credentials() -> tuple[str, str] | None:
     dev = load_dev_env()
-    if "EULER_USERNAME" in dev and "EULER_PASSWORD" in dev:
+    if dev.get("EULER_USERNAME") and dev.get("EULER_PASSWORD"):
         return dev["EULER_USERNAME"], dev["EULER_PASSWORD"]
     username = _keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME_KEY)
     if not username:
