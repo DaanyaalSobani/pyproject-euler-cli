@@ -45,7 +45,22 @@ def logout():
 @click.argument("problem", type=int)
 @click.argument("answer")
 def submit(problem, answer):
-    pass  # implemented in Task 7
+    from . import submit as submit_mod
+    try:
+        correct = submit_mod.submit_answer(problem, answer)
+    except PermissionError:
+        console.print("[yellow]Not logged in. Run `euler login` first.[/yellow]")
+        raise SystemExit(1)
+    except ValueError as e:
+        console.print(f"[yellow]{e}[/yellow]")
+        raise SystemExit(1)
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error: {e}")
+        raise SystemExit(1)
+    if correct:
+        console.print("[green]✓ Correct![/green]")
+    else:
+        console.print("[red]✗ Incorrect[/red]")
 
 
 @main.command()

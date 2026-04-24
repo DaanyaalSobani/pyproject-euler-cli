@@ -59,3 +59,35 @@ def test_logout_removes_keyring_when_confirmed():
     assert result.exit_code == 0
     mock_logout.assert_called_once_with(remove_keyring=True)
     assert "Logged out" in result.output
+
+
+def test_submit_correct():
+    runner = CliRunner()
+    with patch("euler.submit.submit_answer", return_value=True):
+        result = runner.invoke(main, ["submit", "42", "162"])
+    assert result.exit_code == 0
+    assert "Correct" in result.output
+
+
+def test_submit_incorrect():
+    runner = CliRunner()
+    with patch("euler.submit.submit_answer", return_value=False):
+        result = runner.invoke(main, ["submit", "42", "0"])
+    assert result.exit_code == 0
+    assert "Incorrect" in result.output
+
+
+def test_submit_not_logged_in_exits_1():
+    runner = CliRunner()
+    with patch("euler.submit.submit_answer", side_effect=PermissionError("Not logged in")):
+        result = runner.invoke(main, ["submit", "42", "162"])
+    assert result.exit_code == 1
+    assert "euler login" in result.output
+
+
+def test_submit_already_solved_exits_1():
+    runner = CliRunner()
+    with patch("euler.submit.submit_answer", side_effect=ValueError("Problem 1 is already solved (no answer form on page).")):
+        result = runner.invoke(main, ["submit", "1", "233168"])
+    assert result.exit_code == 1
+    assert "already solved" in result.output
