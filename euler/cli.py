@@ -23,14 +23,14 @@ def login():
     try:
         display_name = auth.login(username, password)
     except ValueError as e:
-        console.print(f"[red]✗[/red] {e}")
+        console.print(f"[red]x[/red] {e}")
         raise SystemExit(1)
     except Exception as e:
-        console.print(f"[red]✗[/red] Unexpected error: {e}")
+        console.print(f"[red]x[/red] Unexpected error: {e}")
         raise SystemExit(1)
     if creds is None:
         config.save_credentials(username, password)
-    console.print(f"[green]✓[/green] Logged in as {display_name}")
+    console.print(f"[green]Logged in as {display_name}[/green]")
 
 
 @main.command()
@@ -39,7 +39,7 @@ def logout():
         "Also remove saved credentials from keyring?", default=False
     )
     auth.logout(remove_keyring=remove)
-    console.print("[green]✓[/green] Logged out")
+    console.print("[green]Logged out[/green]")
 
 
 @main.command()
@@ -50,9 +50,9 @@ def submit(problem, answer):
     try:
         correct = submit_mod.submit_answer(problem, answer)
         if correct:
-            console.print("[green]✓ Correct![/green]")
+            console.print("[green]Correct![/green]")
         else:
-            console.print("[red]✗ Incorrect[/red]")
+            console.print("[red]Incorrect[/red]")
     except PermissionError:
         console.print("[yellow]Not logged in. Run `euler login` first.[/yellow]")
         raise SystemExit(1)
@@ -60,10 +60,10 @@ def submit(problem, answer):
         console.print(f"[yellow]{e}[/yellow]")
         raise SystemExit(1)
     except requests.exceptions.RequestException as e:
-        console.print(f"[red]✗[/red] Network error: {e}")
+        console.print(f"[red]x[/red] Network error: {e}")
         raise SystemExit(1)
     except Exception as e:
-        console.print(f"[red]✗[/red] Error: {e}")
+        console.print(f"[red]x[/red] Error: {e}")
         raise SystemExit(1)
 
 
@@ -82,8 +82,8 @@ def status():
         console.print("[yellow]Not logged in. Run `euler login` first.[/yellow]")
         raise SystemExit(1)
     except requests.exceptions.RequestException as e:
-        console.print(f"[red]✗[/red] Network error: {e}")
+        console.print(f"[red]x[/red] Network error: {e}")
         raise SystemExit(1)
     except Exception as e:
-        console.print(f"[red]✗[/red] Error: {e}")
+        console.print(f"[red]x[/red] Error: {e}")
         raise SystemExit(1)
