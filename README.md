@@ -53,6 +53,17 @@ euler submit 42 162
 
 The command prints whether your answer is correct or incorrect and, on a correct submission, shows your new solve count.
 
+### Read a problem
+
+```bash
+euler get-problem <problem>
+
+# Example
+euler get-problem 9
+```
+
+Fetches the problem text from `projecteuler.net/minimal=<N>` and prints it to the terminal. LaTeX math (e.g. `$a^2 + b^2 = c^2$`) is kept verbatim — the terminal can't render it but the notation is readable. Does not require login.
+
 ### Log out
 
 ```bash

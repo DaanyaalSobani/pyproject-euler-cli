@@ -12,6 +12,7 @@ euler/
   auth.py      — login(username, password) → str; logout(remove_keyring)
   submit.py    — submit_answer(problem, answer) → bool (True = correct)
   status.py    — get_status() → dict(username: str, solved: int)
+  problem.py   — get_problem_text(n) → str (fetches from /minimal=N, no auth needed)
 ```
 
 ## Session Persistence
@@ -45,6 +46,7 @@ pip install -e ".[dev]"
 euler login
 euler submit 1 233168
 euler status
+euler get-problem 9
 euler logout
 ```
 

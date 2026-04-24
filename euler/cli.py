@@ -1,8 +1,17 @@
+import sys
 import click
 import requests
 from rich.console import Console
 from rich.table import Table
 from . import auth, config
+
+# Force UTF-8 so unicode (superscripts, math symbols, box chars) renders on
+# Windows consoles that default to cp1252. No-op on POSIX / already-UTF-8 streams.
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 console = Console()
 
@@ -87,3 +96,27 @@ def status():
     except Exception as e:
         console.print(f"[red]x[/red] Error: {e}")
         raise SystemExit(1)
+
+
+@main.command("get-problem")
+@click.argument("problem", type=int)
+def get_problem(problem):
+    from rich.panel import Panel
+    from . import problem as problem_mod
+    try:
+        text = problem_mod.get_problem_text(problem)
+    except ValueError as e:
+        console.print(f"[yellow]{e}[/yellow]")
+        raise SystemExit(1)
+    except requests.exceptions.RequestException as e:
+        console.print(f"[red]x[/red] Network error: {e}")
+        raise SystemExit(1)
+    rendered = problem_mod.render_for_terminal(text)
+    panel = Panel(
+        rendered.strip(),
+        title=f"[bold cyan]Problem {problem}[/bold cyan]",
+        subtitle=f"[dim]projecteuler.net/problem={problem}[/dim]",
+        border_style="cyan",
+        padding=(1, 2),
+    )
+    console.print(panel)

@@ -127,3 +127,30 @@ def test_status_network_error_exits_1():
         result = runner.invoke(main, ["status"])
     assert result.exit_code == 1
     assert "Network error" in result.output
+
+
+def test_get_problem_shows_problem_text():
+    runner = CliRunner()
+    with patch("euler.problem.get_problem_text", return_value="A Pythagorean triplet...\n\nFind abc."):
+        result = runner.invoke(main, ["get-problem", "9"])
+    assert result.exit_code == 0
+    assert "Problem 9" in result.output
+    assert "Pythagorean triplet" in result.output
+    assert "Find abc." in result.output
+
+
+def test_get_problem_invalid_exits_1():
+    runner = CliRunner()
+    with patch("euler.problem.get_problem_text", side_effect=ValueError("Problem 99999 returned empty response")):
+        result = runner.invoke(main, ["get-problem", "99999"])
+    assert result.exit_code == 1
+    assert "empty response" in result.output
+
+
+def test_get_problem_network_error_exits_1():
+    import requests
+    runner = CliRunner()
+    with patch("euler.problem.get_problem_text", side_effect=requests.exceptions.ConnectionError("unreachable")):
+        result = runner.invoke(main, ["get-problem", "9"])
+    assert result.exit_code == 1
+    assert "Network error" in result.output
