@@ -108,3 +108,20 @@ def test_submit_raises_if_session_expired(tmp_path, monkeypatch):
     with patch("euler.session.load_session", return_value=mock_sess):
         with pytest.raises(PermissionError):
             submit_mod.submit_answer(42, "162")
+
+
+_UNKNOWN_RESPONSE_HTML = """
+<html><body>
+<div id="content">
+  <p>You are submitting too quickly. Please wait and try again.</p>
+</div>
+</body></html>
+"""
+
+
+def test_submit_returns_false_on_unknown_response(tmp_path, monkeypatch):
+    """A response missing both correct and wrong markers (e.g., rate-limit page)
+    must not be silently classified as correct."""
+    monkeypatch.setattr(config, "SESSION_FILE", tmp_path / "session.json")
+    with patch("euler.session.load_session", return_value=_make_session(_UNSOLVED_PROBLEM_HTML, _UNKNOWN_RESPONSE_HTML)):
+        assert submit_mod.submit_answer(42, "162") is False

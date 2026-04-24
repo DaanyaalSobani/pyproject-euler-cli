@@ -91,3 +91,12 @@ def test_submit_already_solved_exits_1():
         result = runner.invoke(main, ["submit", "1", "233168"])
     assert result.exit_code == 1
     assert "already solved" in result.output
+
+
+def test_submit_network_error_exits_1():
+    import requests
+    runner = CliRunner()
+    with patch("euler.submit.submit_answer", side_effect=requests.exceptions.ConnectionError("network unreachable")):
+        result = runner.invoke(main, ["submit", "42", "162"])
+    assert result.exit_code == 1
+    assert "Network error" in result.output

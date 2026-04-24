@@ -3,6 +3,7 @@ from . import config, session
 
 _CSRF_FIELD = "csrf_token"
 _WRONG_IMAGE = "answer_wrong.png"
+_CORRECT_IMAGE = "answer_correct.png"
 
 
 def _find_answer_input(html: str, problem: int) -> tuple[str, str] | None:
@@ -17,8 +18,10 @@ def _find_answer_input(html: str, problem: int) -> tuple[str, str] | None:
 
 
 def _is_correct(html: str) -> bool:
-    """Correct responses omit answer_wrong.png. Incorrect responses include it."""
-    return _WRONG_IMAGE not in html
+    """Correct responses include answer_correct.png. Incorrect responses include
+    answer_wrong.png. Anomalous pages (rate limit, session expired mid-request) have
+    neither — treat as incorrect rather than silently lying."""
+    return _CORRECT_IMAGE in html
 
 
 def submit_answer(problem: int, answer: str) -> bool:
