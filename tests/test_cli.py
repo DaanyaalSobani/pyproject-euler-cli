@@ -100,3 +100,21 @@ def test_submit_network_error_exits_1():
         result = runner.invoke(main, ["submit", "42", "162"])
     assert result.exit_code == 1
     assert "Network error" in result.output
+
+
+def test_status_shows_username_solved_and_total():
+    runner = CliRunner()
+    with patch("euler.status.get_status", return_value={"username": "daanyaalsobani", "solved": 5, "total": 993}):
+        result = runner.invoke(main, ["status"])
+    assert result.exit_code == 0
+    assert "daanyaalsobani" in result.output
+    assert "5" in result.output
+    assert "993" in result.output
+
+
+def test_status_not_logged_in_exits_1():
+    runner = CliRunner()
+    with patch("euler.status.get_status", side_effect=PermissionError("Not logged in")):
+        result = runner.invoke(main, ["status"])
+    assert result.exit_code == 1
+    assert "euler login" in result.output

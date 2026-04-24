@@ -69,4 +69,21 @@ def submit(problem, answer):
 
 @main.command()
 def status():
-    pass  # implemented in Task 8
+    from . import status as status_mod
+    try:
+        info = status_mod.get_status()
+        table = Table()
+        table.add_column("Username")
+        table.add_column("Solved")
+        table.add_column("Total")
+        table.add_row(info["username"], str(info["solved"]), str(info["total"]))
+        console.print(table)
+    except PermissionError:
+        console.print("[yellow]Not logged in. Run `euler login` first.[/yellow]")
+        raise SystemExit(1)
+    except requests.exceptions.RequestException as e:
+        console.print(f"[red]✗[/red] Network error: {e}")
+        raise SystemExit(1)
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error: {e}")
+        raise SystemExit(1)
