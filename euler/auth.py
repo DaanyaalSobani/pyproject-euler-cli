@@ -1,11 +1,12 @@
 import requests
 from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, Error as PlaywrightError
 
 from . import config, session
 
 _LOGIN_URL = f"{config.BASE_URL}/sign_in"
-_POST_LOGIN_URL_PATTERN = f"{config.BASE_URL}/archives"
+# Playwright glob: match /archives with optional trailing slash or query string
+_POST_LOGIN_URL_PATTERN = f"{config.BASE_URL}/archives**"
 _LOGIN_TIMEOUT_MS = 180_000  # 3 minutes for the user to solve the CAPTCHA
 
 
@@ -41,26 +42,24 @@ def login(username: str, password: str) -> str:
     Returns the display username on success. Raises ValueError on failure.
     """
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=False)
-        context = browser.new_context()
-        page = context.new_page()
-        page.goto(_LOGIN_URL)
+        with pw.chromium.launch(headless=False) as browser:
+            context = browser.new_context()
+            page = context.new_page()
+            page.goto(_LOGIN_URL)
 
-        # Auto-fill username and password. User still has to solve the CAPTCHA.
-        page.fill("#username", username)
-        page.fill("#password", password)
+            # Auto-fill username and password. User still has to solve the CAPTCHA.
+            page.fill("#username", username)
+            page.fill("#password", password)
 
-        try:
-            page.wait_for_url(_POST_LOGIN_URL_PATTERN, timeout=_LOGIN_TIMEOUT_MS)
-        except Exception as e:
-            browser.close()
-            raise ValueError(
-                f"Login timed out or was not completed ({_LOGIN_TIMEOUT_MS // 1000}s)."
-            ) from e
+            try:
+                page.wait_for_url(_POST_LOGIN_URL_PATTERN, timeout=_LOGIN_TIMEOUT_MS)
+            except PlaywrightError as e:
+                raise ValueError(
+                    f"Login timed out or was not completed ({_LOGIN_TIMEOUT_MS // 1000}s)."
+                ) from e
 
-        html = page.content()
-        cookies = context.cookies()
-        browser.close()
+            html = page.content()
+            cookies = context.cookies()
 
     display_name = _extract_display_name(html)
     if display_name is None:
