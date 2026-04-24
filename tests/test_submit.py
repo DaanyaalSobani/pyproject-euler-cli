@@ -65,16 +65,16 @@ def _make_session(get_html: str, post_html: str, get_url: str = "https://project
     return s
 
 
-def test_submit_correct_returns_true(tmp_path, monkeypatch):
+def test_submit_correct_returns_correct(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "SESSION_FILE", tmp_path / "session.json")
     with patch("euler.session.load_session", return_value=_make_session(_UNSOLVED_PROBLEM_HTML, _CORRECT_RESPONSE_HTML)):
-        assert submit_mod.submit_answer(42, "162") is True
+        assert submit_mod.submit_answer(42, "162") == "correct"
 
 
-def test_submit_incorrect_returns_false(tmp_path, monkeypatch):
+def test_submit_incorrect_returns_incorrect(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "SESSION_FILE", tmp_path / "session.json")
     with patch("euler.session.load_session", return_value=_make_session(_UNSOLVED_PROBLEM_HTML, _INCORRECT_RESPONSE_HTML)):
-        assert submit_mod.submit_answer(42, "0") is False
+        assert submit_mod.submit_answer(42, "0") == "incorrect"
 
 
 def test_submit_posts_correct_dynamic_field_name(tmp_path, monkeypatch):
@@ -119,9 +119,10 @@ _UNKNOWN_RESPONSE_HTML = """
 """
 
 
-def test_submit_returns_false_on_unknown_response(tmp_path, monkeypatch):
-    """A response missing both correct and wrong markers (e.g., rate-limit page)
-    must not be silently classified as correct."""
+def test_submit_returns_blocked_on_unknown_response(tmp_path, monkeypatch):
+    """A response missing both correct and wrong markers (e.g., bot-deflection
+    redirect to /about, rate-limit page) must surface as "blocked", not silently
+    reported as correct or incorrect."""
     monkeypatch.setattr(config, "SESSION_FILE", tmp_path / "session.json")
     with patch("euler.session.load_session", return_value=_make_session(_UNSOLVED_PROBLEM_HTML, _UNKNOWN_RESPONSE_HTML)):
-        assert submit_mod.submit_answer(42, "162") is False
+        assert submit_mod.submit_answer(42, "162") == "blocked"

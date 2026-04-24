@@ -63,7 +63,7 @@ def test_logout_removes_keyring_when_confirmed():
 
 def test_submit_correct():
     runner = CliRunner()
-    with patch("euler.submit.submit_answer", return_value=True):
+    with patch("euler.submit.submit_answer", return_value="correct"):
         result = runner.invoke(main, ["submit", "42", "162"])
     assert result.exit_code == 0
     assert "Correct" in result.output
@@ -71,10 +71,20 @@ def test_submit_correct():
 
 def test_submit_incorrect():
     runner = CliRunner()
-    with patch("euler.submit.submit_answer", return_value=False):
+    with patch("euler.submit.submit_answer", return_value="incorrect"):
         result = runner.invoke(main, ["submit", "42", "0"])
     assert result.exit_code == 0
     assert "Incorrect" in result.output
+
+
+def test_submit_blocked_exits_1_with_failure_message():
+    runner = CliRunner()
+    with patch("euler.submit.submit_answer", return_value="blocked"):
+        result = runner.invoke(main, ["submit", "9", "31875000"])
+    assert result.exit_code == 1
+    assert "Submission failed" in result.output
+    # Does not mislabel as incorrect
+    assert "Incorrect" not in result.output
 
 
 def test_submit_not_logged_in_exits_1():

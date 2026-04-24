@@ -52,15 +52,22 @@ def _find_answer_input(html: str, problem: int) -> tuple[str, str] | None:
     return answer_input["name"], token
 
 
-def _is_correct(html: str) -> bool:
-    """Correct responses include answer_correct.png. Incorrect responses include
-    answer_wrong.png. Anomalous pages (rate limit, session expired mid-request) have
-    neither — treat as incorrect rather than silently lying."""
-    return _CORRECT_IMAGE in html
+def _classify_response(html: str) -> str:
+    """Returns "correct", "incorrect", or "blocked".
+
+    "blocked" means PE returned a response with neither marker — typically the
+    /about page it 302-redirects to when bot-deflection kicks in. The answer
+    was not actually processed; treat this as a submission failure rather than
+    silently reporting "incorrect"."""
+    if _CORRECT_IMAGE in html:
+        return "correct"
+    if _WRONG_IMAGE in html:
+        return "incorrect"
+    return "blocked"
 
 
-def submit_answer(problem: int, answer: str) -> bool:
-    """Submit answer to problem N. Returns True if correct.
+def submit_answer(problem: int, answer: str) -> str:
+    """Submit answer to problem N. Returns "correct", "incorrect", or "blocked".
     Raises PermissionError if not logged in.
     Raises ValueError if the problem is already solved.
     """
@@ -93,4 +100,4 @@ def submit_answer(problem: int, answer: str) -> bool:
     )
     _save_debug_dump(post_resp)
     post_resp.raise_for_status()
-    return _is_correct(post_resp.text)
+    return _classify_response(post_resp.text)

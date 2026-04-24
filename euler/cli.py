@@ -57,11 +57,7 @@ def logout():
 def submit(problem, answer):
     from . import submit as submit_mod
     try:
-        correct = submit_mod.submit_answer(problem, answer)
-        if correct:
-            console.print("[green]Correct![/green]")
-        else:
-            console.print("[red]Incorrect[/red]")
+        result = submit_mod.submit_answer(problem, answer)
     except PermissionError:
         console.print("[yellow]Not logged in. Run `euler login` first.[/yellow]")
         raise SystemExit(1)
@@ -73,6 +69,17 @@ def submit(problem, answer):
         raise SystemExit(1)
     except Exception as e:
         console.print(f"[red]x[/red] Error: {e}")
+        raise SystemExit(1)
+    if result == "correct":
+        console.print("[green]Correct![/green]")
+    elif result == "incorrect":
+        console.print("[red]Incorrect[/red]")
+    else:  # "blocked"
+        console.print(
+            "[yellow]Submission failed — PE did not process the answer "
+            "(likely bot deflection; the response had no correct/incorrect marker).[/yellow]"
+        )
+        console.print("[dim]Details: ~/.euler/last_submit_debug.json[/dim]")
         raise SystemExit(1)
 
 
